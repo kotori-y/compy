@@ -143,9 +143,7 @@ def GetInfoFromPDBbind(PDBcode,item_list=['PDB ID','Protein Name','Ligand Name',
     try:
         request_url = 'http://www.pdbbind-cn.org/quickpdb.asp'
         s = requests.Session()
-        form_data = {'quickpdb': PDBcode,
-                     'x': 42,
-                     'y': 21}
+        form_data = {'quickpdb': PDBcode,}
         response = s.post(request_url,data=form_data,timeout=30)
         html = response.text
         html = etree.HTML(html)
@@ -181,13 +179,4 @@ if '__main__' == __name__:
     print(res,end='\n\n')
         
         
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
+             

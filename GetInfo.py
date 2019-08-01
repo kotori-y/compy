@@ -203,6 +203,7 @@ def GetInfoFromPDBbind(PDBcode,item_list=['PDB ID','Protein Name','Ligand Name',
     except:
         return None
     
+<<<<<<< HEAD
 ##        
 #if '__main__' == __name__:
 ###    drugbank_id = ['DB00010',
@@ -227,3 +228,26 @@ def GetInfoFromPDBbind(PDBcode,item_list=['PDB ID','Protein Name','Ligand Name',
 #    res = GetTargetFromChembel(Chembl_id)
 #    print(res)
 #    
+=======
+        
+if '__main__' == __name__:
+    drugbank_id = ['DB00010',
+                   'DB00569',
+                   'DB01226']
+    
+    for drugb_id in drugbank_id:
+        res = GetInfoFromDrugBank(drugb_id,item_list=['Name','SMILES','ATC Codes','CAS number','InChI Key'])
+        print(res,end='\n\n')
+    
+    
+    cid = 'cid2244'
+    res = GetInfoFromPubChem(cid)
+    print(res,end='\n\n')
+        
+    pdbcode = '10gs'
+    res = GetInfoFromPDBbind(pdbcode)
+    print(res,end='\n\n')
+        
+        
+             
+>>>>>>> bc3ec7e7beaad3939e143f5c06cc3aa66e338f0a

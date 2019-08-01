@@ -11,12 +11,16 @@ Created on Fri Jul 12 09:20:33 2019
 ♥I love Princess Zelda forever♥
 """
 
-#print(__doc__)
+print(__doc__)
 
 import requests
 from lxml import etree
 from collections import namedtuple
 import re
+import json
+from requests import exceptions
+import xml.etree.ElementTree as ET
+
 
 
 def GetInfoFromDrugBank(drugb_id,item_list=['Name','SMILES','ATC Codes']):
@@ -60,9 +64,31 @@ def GetInfoFromDrugBank(drugb_id,item_list=['Name','SMILES','ATC Codes']):
         item_list.insert(0,'DrugBankID')
         res = namedtuple('DrugBank',item_list)      
         return res(*info_list)    
+    except exceptions.Timeout:
+        return 'Timeout'  
     except:
         return None
 
+
+def GetInfoFromUniprot(UniProt_id,):
+    """
+    UniProt_id = 'P23975'
+    """
+    request_url = 'https://www.uniprot.org/uniprot/{}.xml'.format(UniProt_id)
+    s = requests.Session()
+    try:
+        r = s.get(request_url,timeout=30)
+        if r.status_code == 200:
+            tree = ET.fromstring(r.text)
+            entry = tree[0]
+            dbReference = entry.findall('{http://uniprot.org/uniprot}dbReference[@type="ChEMBL"]')
+            res = [i.attrib['id'] for i in dbReference]
+        else:
+            res = [None]       
+    except:
+        res = [None]
+    
+    return '|'.join(res)
 
 
 def GetInfoFromZinc():
@@ -72,11 +98,24 @@ def GetInfoFromZinc():
 
 
 
-def GetInfoFromChembel():
+def GetTargetFromChembel(Chembl_id,Xref_src_db=['UniProt']):
     """
+    CHEMBL25
     """
-    pass
-
+    request_url = 'https://www.ebi.ac.uk/chembl/api/data/target/{}.json'.format(Chembl_id)
+    s = requests.Session()
+    response = s.get(request_url,timeout=60).text
+    data = json.loads(response)
+    info = [Chembl_id,data['organism'],data['pref_name']]
+    xref = [x['xref_id']\
+            for x in data['target_components'][0]['target_component_xrefs']\
+            if x['xref_src_db'] in Xref_src_db]
+    info.append(xref)
+    
+    items = ['Chembl_id','Organism','Pref_name']
+    items.extend(Xref_src_db)
+    res = namedtuple('ChEMBLTarget',items)   
+    return res(*info)
 
 
 def GetInfoFromPubChem(cid,item_list=['InChI','InChI Key','Canonical SMILES']):
@@ -97,8 +136,11 @@ def GetInfoFromPubChem(cid,item_list=['InChI','InChI Key','Canonical SMILES']):
                 yield None            
             idx += 1
     
-    
     try:
+        try:
+            cid = str(int(cid))
+        except:
+            pass
         cid = cid.replace('cid','')
         request_url = 'https://pubchem.ncbi.nlm.nih.gov/rest/pug_view/data/compound/{}/JSON/'.format(cid)
         s = requests.Session()
@@ -108,6 +150,8 @@ def GetInfoFromPubChem(cid,item_list=['InChI','InChI Key','Canonical SMILES']):
         info_list.insert(0,cid)
         item_list = [x.replace(' ','_') for x in item_list]
         item_list.insert(0,'CID')    
+    except exceptions.Timeout:
+        return 'Timeout'
     except:
         return None
 
@@ -143,9 +187,7 @@ def GetInfoFromPDBbind(PDBcode,item_list=['PDB ID','Protein Name','Ligand Name',
     try:
         request_url = 'http://www.pdbbind-cn.org/quickpdb.asp'
         s = requests.Session()
-        form_data = {'quickpdb': PDBcode,
-                     'x': 42,
-                     'y': 21}
+        form_data = {'quickpdb': PDBcode,}
         response = s.post(request_url,data=form_data,timeout=30)
         html = response.text
         html = etree.HTML(html)
@@ -161,33 +203,27 @@ def GetInfoFromPDBbind(PDBcode,item_list=['PDB ID','Protein Name','Ligand Name',
     except:
         return None
     
-        
-if '__main__' == __name__:
-    drugbank_id = ['DB00010',
-                   'DB00569',
-                   'DB01226']
-    
-    for drugb_id in drugbank_id:
-        res = GetInfoFromDrugBank(drugb_id,item_list=['Name','SMILES','ATC Codes','CAS number','InChI Key'])
-        print(res,end='\n\n')
-    
-    
-    cid = 'cid2244'
-    res = GetInfoFromPubChem(cid)
-    print(res,end='\n\n')
-        
-    pdbcode = '10gs'
-    res = GetInfoFromPDBbind(pdbcode)
-    print(res,end='\n\n')
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
+##        
+#if '__main__' == __name__:
+###    drugbank_id = ['DB00010',
+##                   'DB00569',
+##                   'DB01226']
+##    
+##    for drugb_id in drugbank_id:
+##        res = GetInfoFromDrugBank(drugb_id,item_list=['Name','SMILES','ATC Codes','CAS number','InChI Key'])
+##        print(res,end='\n\n')
+##    
+##    
+##    cid = 'cid2244'
+##    res = GetInfoFromPubChem(cid)
+##    print(res,end='\n\n')
+##        
+##    pdbcode = '10gs'
+##    res = GetInfoFromPDBbind(pdbcode)
+##    print(res,end='\n\n')
+##        
+##
+#    Chembl_id = 'CHEMBL3969'
+#    res = GetTargetFromChembel(Chembl_id)
+#    print(res)
+#    

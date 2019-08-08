@@ -44,14 +44,14 @@ def SearchTargetFromName(name):
         return 'Timeout'
     
 
-def SearchTargetFromUniprotID(uniprot_id):
-    """
-    uniprot_id = P28472 
-    """
-    request_url = 'https://www.ebi.ac.uk/chembl/api/data/target?Uniprot={}'.format(uniprot_id)
-    s = requests.Session()
-    xml = s.get(request_url,timeout=60).text
-    tree = x,l
+#def SearchTargetFromUniprotID(uniprot_id):
+#    """
+#    uniprot_id = P28472 
+#    """
+#    request_url = 'https://www.ebi.ac.uk/chembl/api/data/target?Uniprot={}'.format(uniprot_id)
+#    s = requests.Session()
+#    xml = s.get(request_url,timeout=60).text
+#    tree = x,l
     
     
     

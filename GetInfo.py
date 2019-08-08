@@ -205,7 +205,7 @@ def GetInfoFromPDBbind(PDBcode,item_list=['PDB ID','Protein Name','Ligand Name',
     
 ##        
 if '__main__' == __name__:
-    drugbank_id = ['DB00010',s
+    drugbank_id = ['DB00010',
                    'DB00569',
                    'DB01226']
 #    

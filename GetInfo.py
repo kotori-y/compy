@@ -11,7 +11,6 @@ Created on Fri Jul 12 09:20:33 2019
 ♥I love Princess Zelda forever♥
 """
 
-print(__doc__)
 
 import requests
 from lxml import etree
@@ -20,21 +19,21 @@ import re
 import json
 from requests import exceptions
 import xml.etree.ElementTree as ET
+import pandas as pd
+import multiprocessing as mp
 
-
-
-def GetInfoFromDrugBank(drugb_id,item_list=['Name','SMILES','ATC Codes']):
+def GetInfoFromDrugBank(drugb_id,item_list=['Name','SMILES', 'ATC Codes']):
     """
     This function is aim to get molecular infomation through DrugBankID
     """
     def GetXpath(item):
-        return '//*[@class="col-md-2 col-sm-4"][text()="{}"]/following-sibling::dd[1]'.format(item)
+        return '//*[@class="col-xl-2 col-md-3 col-sm-4"][text()="{}"]/following-sibling::dd[1]'.format(item)
     
     def GetInfo(xpath_list):
         idx = 0
         while idx != len(xpath_list):
             XPATH = xpath_list[idx]
-            if len(XPATH) != 64:
+            if len(XPATH) != 73:
                 check = html.xpath(XPATH)
                 if check:
                     yield check[0].xpath('string(.)')
@@ -50,12 +49,12 @@ def GetInfoFromDrugBank(drugb_id,item_list=['Name','SMILES','ATC Codes']):
 
 
     try:   
-        request_url = "https://www.drugbank.ca/drugs/{}".format(drugb_id)
+        request_url = "https://go.drugbank.com/drugs/{}".format(drugb_id)
         s = requests.Session()
         html = s.get(request_url,timeout=30).text
         html = etree.HTML(html)
         
-        atc_xpath = '//*[@class="col-md-10 col-sm-8"]/a[contains(@href, "atc")]/@href'
+        atc_xpath = '//*[@class="col-xl-10 col-md-9 col-sm-8"]/a[contains(@href, "atc")]/@href'
         xpath_list = [[GetXpath(item),atc_xpath][item=='ATC Codes'] for item in item_list]
         info_list = [item for item in GetInfo(xpath_list)]
         info_list.insert(0,drugb_id)
@@ -202,28 +201,155 @@ def GetInfoFromPDBbind(PDBcode,item_list=['PDB ID','Protein Name','Ligand Name',
         return res(*info_list)
     except:
         return None
+
+
+
+def GetInfoFromBindingDB(uniprot):
+    """
+    """
+    def _getinfo(TREE,XPATH):
+        return TREE.xpath(XPATH)
     
-##        
+    ori_url = 'https://www.bindingdb.org/bind/tabLuceneResult.jsp?thisInput={}&submit=Go'.format(uniprot)
+    s = requests.Session()
+    response = s.get(ori_url)
+    html = response.text
+    tree = etree.HTML(html)
+    num = _getinfo(tree, XPATH='//*[@class="red"]/text()')[0]
+#    print(num)
+    
+    new_url = ''.join([response.url,'&Increment={}'.format(num)])
+    
+    response = s.get(new_url,timeout=120)
+    html = response.text
+    tree = etree.HTML(html)
+    single = _getinfo(tree, XPATH='//*[@class="single"]')[0::3]
+    double = _getinfo(tree, XPATH='//*[@class="double"]')[0::3]
+    
+    mid = [
+            j.xpath('td[2]/a[1]/text()')[0] 
+            for item in [single,double] for j in item
+            ]
+    smi = [
+            j.xpath('td[2]//*[@style="display:none"]')[0].xpath('string(.)')
+            for item in [single,double] for j in item
+            ]
+    ki = [
+            j.xpath('*[@align="center"]')[0].xpath('string(.)')
+            for item in [single,double] for j in item
+            ]
+    IC50 = [
+            j.xpath('*[@align="center"]')[2].xpath('string(.)')
+            for item in [single,double]
+            for j in item
+            ]
+    kd = [
+            j.xpath('*[@align="center"]')[3].xpath('string(.)')
+            for item in [single,double] for j in item
+            ]
+    EC50_IC50 = [
+            j.xpath('*[@align="center"]')[4].xpath('string(.)')
+            for item in [single,double] for j in item
+            ]
+#    print(smi)
+    
+    out = pd.DataFrame({'mid':mid,
+                        'SMILES':smi,
+                        'Ki':ki,
+                        'IC50':IC50,
+                        'Kd':kd,
+                        'EC50/IC50':EC50_IC50})
+    
+    return out
+    
+
+
+def GetDrugBankBind(drugbank_id):
+    url = 'https://www.drugbank.ca/drugs/{}'.format(drugbank_id)
+    container_xpath = '//*[contains(@class, "bond-list-container")]'
+    card_xpath = '*[@class="bond-list"]/*[@class="bond card"]'
+    data_xpath = '*[@aria-labelledby="binding properties"]//*[@class="table table-sm"]//tbody/tr'
+    s = requests.Session()
+    
+    try:
+        response = s.get(url)
+        html = response.text
+        tree = etree.HTML(html)
+    except:
+        yield pd.DataFrame({drugbank_id: {'UniprotID':None,
+                            'Value':None,
+                            'Unit':None,
+                            'type':None}}).T  
+                            
+    containers = tree.xpath(container_xpath)
+    if containers:
+        for container in containers:
+            _type = re.findall('bond-list-container\W(\w*)',container.attrib['class'])[0]
+            
+            cards = container.xpath(card_xpath)
+            for card in cards:
+                _id = card.xpath('*[@class="card-body"]//*[@class="col-md-5 col-sm-6"][text()="Uniprot ID"]/following-sibling::dd[1]')
+                _id = _id[0].xpath('string(.)') if _id else None
+                
+                datas = card.xpath(data_xpath)
+                if datas:
+                    for data in datas:
+                        unit,val = data.xpath('td/text()')[:2]
+                        yield pd.DataFrame({drugbank_id:{'UniprotID':_id,
+                                        'Value':val,
+                                        'Unit':unit,
+                                        'type':_type}}).T
+                else:
+                    yield pd.DataFrame({drugbank_id:{'UniprotID':_id,
+                                        'Value':None,
+                                        'Unit':None,
+                                        'type':_type}}).T
+    else:
+        yield pd.DataFrame({drugbank_id: {'UniprotID':None,
+                            'Value':None,
+                            'Unit':None,
+                            'type':None}}).T
+
+
+
+def GetKey(uniprot):
+    url = 'https://www.uniprot.org/uniprot/{}'.format(uniprot)
+    response = requests.get(url)
+    
+    if response.status_code==200:
+        html = response.text
+        tree = etree.HTML(html)
+        func = tree.xpath('//*[@class="databaseTable"]//td[text()="Molecular function"]/following-sibling::td')[0]
+        func = func.xpath('string(.)')
+        print('>>> {} Finished'.format(uniprot))
+        return '|'.join(func.split(','))
+    else:
+        print('>>> {} Finished'.format(uniprot))
+        return ''
+
+
+def ChemblidToCid(chemblid):
+    
+    url = "https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/name/{}/xml".format(chemblid)
+    
+    response = requests.get(url)
+    tree = etree.XML(response.text)
+    
+    cid = tree.findall(
+        '{http://www.ncbi.nlm.nih.gov}PC-Compound//{http://www.ncbi.nlm.nih.gov}PC-CompoundType_id_cid'
+        )[0].text
+    
+    return cid
+    
+def main(drugbank_id):
+    d = GetDrugBankBind(drugbank_id)
+    return pd.concat(d)
+    
+    
 if '__main__' == __name__:
-    drugbank_id = ['DB00010',
-                   'DB00569',
-                   'DB01226']
-#    
-    for drugb_id in drugbank_id:
-        res = GetInfoFromDrugBank(drugb_id,item_list=['Name','SMILES','ATC Codes','CAS number','InChI Key'])
-        print(res,end='\n\n')
-##    
-##    
-##    cid = 'cid2244'
-##    res = GetInfoFromPubChem(cid)
-##    print(res,end='\n\n')
-##        
-##    pdbcode = '10gs'
-##    res = GetInfoFromPDBbind(pdbcode)
-##    print(res,end='\n\n')
-##        
-##
-#    Chembl_id = 'CHEMBL3969'
-#    res = GetTargetFromChembel(Chembl_id)
-#    print(res)
-#    
+    
+    drugbank_id = "DB00945"
+    print(
+        GetInfoFromDrugBank(drugbank_id)
+    )
+    
